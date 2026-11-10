@@ -8,6 +8,7 @@ from backend.routes.itinerary import itinerary_bp
 from backend.routes.search import search_bp
 from backend.routes.budget import budget_bp
 from backend.routes.replanner import replanner_bp
+from backend.routes.local_pulse import local_pulse_bp
 app = Flask(__name__)
 
 # Allow frontend requests
@@ -20,6 +21,7 @@ app.register_blueprint(itinerary_bp, url_prefix="/api")
 app.register_blueprint(search_bp, url_prefix="/api")	
 app.register_blueprint(budget_bp, url_prefix="/api")
 app.register_blueprint(replanner_bp, url_prefix="/api")
+app.register_blueprint(local_pulse_bp, url_prefix="/api")
 
 @app.route("/")
 def home():
