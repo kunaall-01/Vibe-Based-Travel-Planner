@@ -5,7 +5,9 @@ from flask_cors import CORS
 from backend.routes.health import health_bp
 from backend.routes.recommendations import recommendation_bp
 from backend.routes.itinerary import itinerary_bp
-
+from backend.routes.search import search_bp
+from backend.routes.budget import budget_bp
+from backend.routes.replanner import replanner_bp
 app = Flask(__name__)
 
 # Allow frontend requests
@@ -15,7 +17,9 @@ CORS(app)
 app.register_blueprint(health_bp, url_prefix="/api")
 app.register_blueprint(recommendation_bp, url_prefix="/api")
 app.register_blueprint(itinerary_bp, url_prefix="/api")
-
+app.register_blueprint(search_bp, url_prefix="/api")	
+app.register_blueprint(budget_bp, url_prefix="/api")
+app.register_blueprint(replanner_bp, url_prefix="/api")
 
 @app.route("/")
 def home():
