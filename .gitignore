@@ -43,3 +43,6 @@ temp/
 *.sqlite
 *.sqlite3
 *.db
+# Frontend dependencies and temporary setup
+frontend/node_modules/
+frontend-temp/
