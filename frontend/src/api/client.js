@@ -18,6 +18,10 @@ export async function get(path, fallback) {
 export async function post(path, body, fallback) {
   try { return (await api.post(path, body)).data; } catch { return fallback; }
 }
+export async function postStrict(path, body) {
+  const response = await api.post(path, body);
+  return response.data;
+}
 
 export function useApi(path, fallback) {
   const [data, setData] = useState(fallback);

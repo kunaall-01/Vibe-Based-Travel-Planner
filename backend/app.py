@@ -2,6 +2,7 @@ from flask import Flask
 from flask_cors import CORS
 
 from backend.database import init_db
+
 from backend.routes.health import health_bp
 from backend.routes.auth import auth_bp
 from backend.routes.recommendations import recommendation_bp
@@ -19,6 +20,7 @@ from backend.routes.realtime import realtime_bp
 from backend.routes.payments import payments_bp
 
 app = Flask(__name__)
+
 CORS(app)
 
 # Register API routes
@@ -44,8 +46,9 @@ def home():
     return {"message": "Vibe-Based Travel Planner Backend is running!"}
 
 
-# Initialize the SQLite database with tables and seed data
+# Initialize SQLite database
 init_db()
+
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
