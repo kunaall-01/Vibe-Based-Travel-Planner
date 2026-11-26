@@ -1,114 +1,97 @@
-from flask import Blueprint, request, jsonify
-from backend.routes.search import travel_options
 import uuid
-from datetime import datetime
+from flask import Blueprint, request, jsonify
+from backend.database import fetch_one, fetch_all, execute_query
+from backend.routes.auth import get_current_user
 
 booking_bp = Blueprint("bookings", __name__)
-
-# Temporary storage for demo bookings
-bookings = []
 
 
 @booking_bp.route("/bookings", methods=["POST"])
 def create_booking():
+    user = get_current_user()
+    if not user:
+        return jsonify({"status": "error", "message": "Please log in to confirm a booking"}), 401
 
     data = request.get_json(silent=True) or {}
+    item = data.get("item") or {}
+    item_name = item.get("name") or data.get("item_name")
+    item_id = str(item.get("id") or data.get("option_id") or "custom")
+    item_meta = item.get("meta") or ""
+    booking_type = (data.get("type") or "activity").lower()
+    dest_name = (data.get("dest") or data.get("destination") or item.get("destination") or "").strip()
+    travel_date = (data.get("date") or data.get("travel_date") or "").strip()
+    travellers = int(data.get("qty") or data.get("travellers") or 1)
+    total_price = float(data.get("total") or item.get("price", 0) * travellers)
+    payment_method = data.get("method") or "UPI"
 
-    customer_name = data.get("customer_name")
-    option_id = data.get("option_id")
-    travel_date = data.get("travel_date")
-    travellers = data.get("travellers", 1)
+    if not item_name or not travel_date:
+        return jsonify({"status": "error", "message": "Item name and travel date are required"}), 400
 
-    if not customer_name or option_id is None or not travel_date:
-        return jsonify({
-            "status": "error",
-            "message": "Please provide customer_name, option_id and travel_date"
-        }), 400
+    # Normalize booking_type
+    type_map = {
+        "hotels": "hotel",
+        "hotel": "hotel",
+        "flights": "flight",
+        "flight": "flight",
+        "trains": "train",
+        "train": "train",
+        "buses": "bus",
+        "bus": "bus",
+        "transport": "transport",
+        "restaurants": "restaurant",
+        "restaurant": "restaurant",
+        "activities": "activity",
+        "activity": "activity",
+    }
+    norm_type = type_map.get(booking_type, "activity")
+    payment_status = "Due on arrival" if payment_method == "Pay at property" else "Paid"
 
-    try:
-        option_id = int(option_id)
-        travellers = int(travellers)
+    # Link to latest upcoming itinerary if one exists
+    itin = fetch_one(
+        "SELECT itinerary_id FROM itineraries WHERE user_id = ? AND status = 'Upcoming' ORDER BY created_at DESC LIMIT 1",
+        (user["user_id"],),
+    )
+    itin_id = itin["itinerary_id"] if itin else None
 
-        if travellers < 1 or travellers > 20:
-            raise ValueError
-
-        datetime.strptime(travel_date, "%Y-%m-%d")
-
-    except (ValueError, TypeError):
-        return jsonify({
-            "status": "error",
-            "message": "Invalid option ID, travel date or number of travellers"
-        }), 400
-
-    selected_option = next(
-        (item for item in travel_options if item["id"] == option_id),
-        None
+    ref = "WF-" + uuid.uuid4().hex[:6].upper()
+    bid = execute_query(
+        """
+        INSERT INTO bookings (
+            booking_ref, user_id, itinerary_id, destination_name,
+            booking_type, item_id, item_name, item_meta,
+            travel_date, travellers, total_price, payment_method, payment_status, booking_status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Confirmed')
+        """,
+        (
+            ref, user["user_id"], itin_id, dest_name,
+            norm_type, item_id, item_name, item_meta,
+            travel_date, travellers, total_price, payment_method, payment_status
+        ),
     )
 
-    if selected_option is None:
-        return jsonify({
-            "status": "error",
-            "message": "Selected travel option not found"
-        }), 404
-
-    booking = {
-        "booking_id": "BK-" + uuid.uuid4().hex[:8].upper(),
-        "customer_name": customer_name,
-        "option": selected_option,
-        "travel_date": travel_date,
-        "travellers": travellers,
-        "total_price": selected_option["price"] * travellers,
-        "booking_status": "Confirmed",
-        "booking_type": selected_option["category"]
-    }
-
-    bookings.append(booking)
+    # Also log into trip_expenses for that destination so Budget Guardian stays in sync
+    if dest_name:
+        exp_cat = "Stay" if norm_type == "hotel" else "Transport" if norm_type in ("flight", "train", "bus", "transport") else "Food" if norm_type == "restaurant" else "Activities"
+        execute_query(
+            """
+            INSERT INTO trip_expenses (itinerary_id, user_id, destination_name, category, estimated_amount, actual_amount, day_number, note, expense_date)
+            VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+            """,
+            (itin_id, user["user_id"], dest_name, exp_cat, total_price, total_price, f"Booking: {item_name}", travel_date),
+        )
 
     return jsonify({
-        "status": "success",
-        "message": "Demo booking created successfully!",
-        "booking": booking
+        "status": "Confirmed",
+        "booking_id": bid,
+        "ref": ref,
+        "message": "Booking saved to your trips!",
     }), 201
 
 
-@booking_bp.route("/bookings/<booking_id>", methods=["GET"])
-def get_booking(booking_id):
-
-    booking = next(
-        (item for item in bookings if item["booking_id"] == booking_id),
-        None
-    )
-
-    if booking is None:
-        return jsonify({
-            "status": "error",
-            "message": "Booking not found"
-        }), 404
-
-    return jsonify({
-        "status": "success",
-        "booking": booking
-    })
-
-@booking_bp.route("/my-trips", methods=["GET"])
-def get_my_trips():
-
-    customer_name = request.args.get("customer_name")
-
-    if not customer_name:
-        return jsonify({
-            "status": "error",
-            "message": "Please provide customer_name"
-        }), 400
-
-    user_bookings = [
-        booking for booking in bookings
-        if booking["customer_name"].lower() == customer_name.lower()
-    ]
-
-    return jsonify({
-        "status": "success",
-        "customer_name": customer_name,
-        "total_trips": len(user_bookings),
-        "trips": user_bookings
-    })
+@booking_bp.route("/bookings", methods=["GET"])
+def list_bookings():
+    user = get_current_user()
+    if not user:
+        return jsonify({"status": "error", "message": "Authentication required"}), 401
+    rows = fetch_all("SELECT * FROM bookings WHERE user_id = ? ORDER BY created_at DESC", (user["user_id"],))
+    return jsonify({"status": "success", "bookings": rows})

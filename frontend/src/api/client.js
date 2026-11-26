@@ -1,11 +1,9 @@
 import axios from 'axios';
 import { useEffect, useState } from 'react';
 
-// Flask backend base URL (set VITE_API_URL in .env). If the backend is offline,
-// every call falls back to the mock data so the UI always works.
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
-  timeout: 3000,
+  baseURL: '/api',
+  timeout: 6000,
 });
 
 api.interceptors.request.use((cfg) => {
