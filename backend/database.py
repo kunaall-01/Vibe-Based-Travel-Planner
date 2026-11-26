@@ -77,7 +77,9 @@ def init_db():
         region TEXT NOT NULL,
         primary_vibe TEXT DEFAULT 'heritage',
         description TEXT,
-        image_url TEXT
+        image_url TEXT,
+        latitude REAL,
+        longitude REAL
     );
 
     CREATE TABLE IF NOT EXISTS activities (
@@ -92,6 +94,8 @@ def init_db():
         is_indoor INTEGER DEFAULT 0,
         disruption_fallback TEXT DEFAULT 'none',
         meta TEXT,
+        latitude REAL,
+        longitude REAL,
         FOREIGN KEY (destination_id) REFERENCES destinations(destination_id) ON DELETE CASCADE
     );
 
@@ -104,6 +108,8 @@ def init_db():
         facilities TEXT,
         rating REAL DEFAULT 4.0,
         meta TEXT,
+        latitude REAL,
+        longitude REAL,
         FOREIGN KEY (destination_id) REFERENCES destinations(destination_id) ON DELETE CASCADE
     );
 
@@ -117,6 +123,8 @@ def init_db():
         price_range TEXT NOT NULL,
         rating REAL DEFAULT 4.0,
         meta TEXT,
+        latitude REAL,
+        longitude REAL,
         FOREIGN KEY (destination_id) REFERENCES destinations(destination_id) ON DELETE CASCADE
     );
 
@@ -131,6 +139,8 @@ def init_db():
         price REAL NOT NULL,
         rating REAL DEFAULT 4.0,
         meta TEXT,
+        latitude REAL,
+        longitude REAL,
         FOREIGN KEY (destination_id) REFERENCES destinations(destination_id) ON DELETE CASCADE
     );
 
@@ -142,6 +152,8 @@ def init_db():
         crowd_percentage INTEGER,
         quiet_times TEXT NOT NULL,
         suggestion TEXT,
+        latitude REAL,
+        longitude REAL,
         FOREIGN KEY (destination_id) REFERENCES destinations(destination_id) ON DELETE CASCADE
     );
 
@@ -420,7 +432,7 @@ def init_db():
     );
     """)
 
-    # Safely add columns to connection_requests for local requests
+    # Safely add columns to connection_requests and geo columns to place tables
     cols = [r[1] for r in cur.execute("PRAGMA table_info(connection_requests)").fetchall()]
     if "request_type" not in cols:
         cur.execute("ALTER TABLE connection_requests ADD COLUMN request_type TEXT DEFAULT 'buddy'")
@@ -428,6 +440,13 @@ def init_db():
         cur.execute("ALTER TABLE connection_requests ADD COLUMN destination TEXT DEFAULT ''")
     if "preferred_date" not in cols:
         cur.execute("ALTER TABLE connection_requests ADD COLUMN preferred_date TEXT DEFAULT ''")
+
+    for tbl in ("destinations", "activities", "hotels", "restaurants", "transport", "crowd_info", "rentals"):
+        tcols = [r[1] for r in cur.execute(f"PRAGMA table_info({tbl})").fetchall()]
+        if "latitude" not in tcols:
+            cur.execute(f"ALTER TABLE {tbl} ADD COLUMN latitude REAL")
+        if "longitude" not in tcols:
+            cur.execute(f"ALTER TABLE {tbl} ADD COLUMN longitude REAL")
 
     # ---------- SEED COMMUNITY & CATALOG (only if destinations table is empty) ----------
     if cur.execute("SELECT COUNT(*) FROM destinations").fetchone()[0] == 0:
@@ -638,5 +657,162 @@ def init_db():
                 (6, 'Raghav Joshi', 'https://i.pravatar.cc/200?img=53', 'Udaipur', 'heritage', 'Golden hour reflections across Lake Pichola from Hanuman Ghat.', '', 'https://images.unsplash.com/photo-1524492412937-b28074a5d7da?auto=format&fit=crop&w=900&q=75', 16),
             ])
 
+    _populate_coordinates(cur)
     conn.commit()
     conn.close()
+
+
+def _populate_coordinates(cur):
+    """Ensure every destination and place in the DB has accurate latitude/longitude."""
+    dest_coords = {
+        "jaipur": (26.9124, 75.7873),
+        "goa": (15.2993, 74.1240),
+        "manali": (32.2432, 77.1892),
+        "udaipur": (24.5854, 73.7125),
+        "agra": (27.1767, 78.0081),
+        "rishikesh": (30.0869, 78.2676),
+        "kyoto": (35.0116, 135.7681),
+        "paris": (48.8566, 2.3522),
+    }
+    for slug, (lat, lng) in dest_coords.items():
+        cur.execute("UPDATE destinations SET latitude = ?, longitude = ? WHERE LOWER(slug) = ?", (lat, lng, slug))
+
+    hotel_coords = {
+        "Haveli Heritage Stay": (26.9239, 75.8267),
+        "The Pink Courtyard": (26.9061, 75.8006),
+        "Zostel Jaipur": (26.9163, 75.8124),
+        "Rambagh Residency": (26.8982, 75.8082),
+        "Casa Colva Beach Resort": (15.2798, 73.9135),
+        "Baga Breeze Hostel": (15.5553, 73.7517),
+        "Mountain View Hotel": (32.2426, 77.1892),
+        "Snow Valley Resort": (32.2489, 77.1765),
+        "Zostel Old Manali": (32.2568, 77.1806),
+        "Lake View Boutique Hotel": (24.5762, 73.6808),
+        "Zostel Udaipur": (24.5795, 73.6794),
+        "Tajview Courtyard": (27.1636, 78.0421),
+        "Ganga Kinare Riverside Stay": (30.1255, 78.3230),
+        "Higashiyama Machiya Ryokan": (35.0037, 135.7785),
+        "Hotel Le Saint-Grégoire": (48.8484, 2.3264),
+    }
+    for name, (lat, lng) in hotel_coords.items():
+        cur.execute("UPDATE hotels SET latitude = ?, longitude = ? WHERE name = ?", (lat, lng, name))
+
+    rest_coords = {
+        "Laxmi Misthan Bhandar": (26.9195, 75.8249),
+        "Tapri Central": (26.9022, 75.8021),
+        "1135 AD": (26.9855, 75.8513),
+        "Britto's Shack": (15.5608, 73.7501),
+        "Gunpowder": (15.5992, 73.7765),
+        "Himalayan Cafe": (32.2573, 77.1818),
+        "Johnson's Cafe": (32.2471, 77.1874),
+        "Ambrai Restaurant": (24.5776, 73.6804),
+        "Jheel's Ginger Coffee Bar": (24.5791, 73.6819),
+        "Pinch of Spice": (27.1618, 78.0448),
+        "Little Buddha Cafe": (30.1312, 78.3289),
+        "Gion Karyo": (35.0024, 135.7746),
+        "Café de Flore": (48.8540, 2.3326),
+    }
+    for name, (lat, lng) in rest_coords.items():
+        cur.execute("UPDATE restaurants SET latitude = ?, longitude = ? WHERE name = ?", (lat, lng, name))
+
+    act_coords = {
+        "Amber Fort Sunrise Tour": (26.9855, 75.8513),
+        "Block Printing Workshop": (26.8194, 75.7950),
+        "Hot Air Balloon": (26.9920, 75.8600),
+        "Albert Hall Museum Visit": (26.9116, 75.8195),
+        "Dal Baati Churma Cooking Class": (26.9148, 75.8102),
+        "Palolem Sunset Kayak": (15.0100, 74.0232),
+        "Fontainhas Latin Quarter Walk": (15.4979, 73.8299),
+        "Goan Spice Plantation & Indoor Tasting": (15.3982, 74.0246),
+        "Tito Lane Nightlife Pass": (15.5567, 73.7535),
+        "Solang Valley Paragliding & Ridge View": (32.3164, 77.1569),
+        "Jogini Waterfall Pine Forest Trek": (32.2636, 77.1945),
+        "Atal Tunnel & Sissu Valley Scenic Drive": (32.4787, 77.1319),
+        "Old Manali Riverside Café & Bakery Hop": (32.2565, 77.1820),
+        "Museum of Himachal Culture & Folk Art": (32.2481, 77.1805),
+        "Himalayan Hot Springs & Spa at Vashisht": (32.2654, 77.1887),
+        "Lake Pichola Sunset Boat Ride": (24.5720, 73.6790),
+        "Bagore Ki Haveli Folk Show": (24.5796, 73.6816),
+        "Monsoon Palace Hill Drive": (24.5936, 73.6388),
+        "Taj Mahal Sunrise Entry": (27.1751, 78.0421),
+        "Marble Inlay Workshop": (27.1672, 78.0362),
+        "Ganga White Water Rafting": (30.1365, 78.3878),
+        "Evening Ganga Aarti at Triveni Ghat": (30.1032, 78.2974),
+        "Indoor Sound Healing & Yoga Session": (30.1282, 78.3248),
+        "Fushimi Inari Early Hike": (34.9671, 135.7727),
+        "Nishiki Covered Market Food Tour": (35.0050, 135.7649),
+        "Traditional Tea Ceremony Indoors": (35.0030, 135.7755),
+        "Louvre Museum Curated Highlights": (48.8606, 2.3376),
+        "Seine Evening Cruise & Bistro Walk": (48.8584, 2.3422),
+        "Le Marais Pastry & Patisserie Trail": (48.8575, 2.3622),
+    }
+    for name, (lat, lng) in act_coords.items():
+        cur.execute("UPDATE activities SET latitude = ?, longitude = ? WHERE name = ?", (lat, lng, name))
+
+    trans_coords = {
+        "IndiGo 6E-203": (26.8242, 75.8122),
+        "Shatabdi 12015": (26.9196, 75.7880),
+        "RSRTC Volvo AC": (26.9225, 75.7995),
+        "Air India AI-885": (15.3808, 73.8314),
+        "Konkan Kanya Express": (15.2712, 73.9693),
+        "HRTC Himsuta Volvo": (32.2396, 77.1887),
+        "Alliance Air · DEL → KUU": (31.8767, 77.1544),
+        "Himalayan Innova Cab": (32.2330, 77.1860),
+        "IndiGo 6E-512": (24.6177, 73.8961),
+        "Mewar Express 12963": (24.5681, 73.6967),
+        "Gatimaan Express 12050": (27.1583, 77.9896),
+        "Uttarakhand Volvo AC": (30.1045, 78.2881),
+        "JR Tokaido Shinkansen": (34.9858, 135.7588),
+        "Air France AF-225": (49.0097, 2.5479),
+    }
+    for prov, (lat, lng) in trans_coords.items():
+        cur.execute("UPDATE transport SET latitude = ?, longitude = ? WHERE provider_name = ?", (lat, lng, prov))
+
+    rental_coords = {
+        "Honda Activa 6G": (26.9200, 75.8160),
+        "Mahindra Thar 4x4": (26.9090, 75.7980),
+        "TVS Ntorq 125": (15.5439, 73.7553),
+        "Maruti Baleno Manual": (15.3850, 73.8350),
+        "Royal Enfield Himalayan 411": (32.2442, 77.1896),
+        "Toyota Innova Crysta": (32.2410, 77.1905),
+        "Suzuki Access 125": (24.5802, 73.6788),
+        "Bajaj Avenger 220": (30.1290, 78.3260),
+    }
+    for mod, (lat, lng) in rental_coords.items():
+        cur.execute("UPDATE rentals SET latitude = ?, longitude = ? WHERE model_name = ?", (lat, lng, mod))
+
+    crowd_coords = {
+        "Hawa Mahal": (26.9239, 75.8267),
+        "Amber Fort": (26.9855, 75.8513),
+        "Nahargarh Fort": (26.9373, 75.8155),
+        "Bapu Bazaar": (26.9182, 75.8224),
+        "Baga Beach": (15.5553, 73.7517),
+        "Fontainhas Latin Quarter": (15.4979, 73.8299),
+        "Agonda Beach": (15.0445, 73.9871),
+        "Solang Valley": (32.3164, 77.1569),
+        "Hadimba Temple": (32.2484, 77.1807),
+        "Jogini Waterfall Trail": (32.2636, 77.1945),
+        "Old Manali Bridge & Cafés": (32.2535, 77.1843),
+        "City Palace": (24.5764, 73.6835),
+        "Fateh Sagar Lake": (24.6004, 73.6736),
+        "Saheliyon Ki Bari": (24.6028, 73.6860),
+        "Taj Mahal East Gate": (27.1751, 78.0421),
+        "Mehtab Bagh Gardens": (27.1802, 78.0422),
+        "Laxman Jhula Market": (30.1264, 78.3292),
+        "Neer Garh Waterfall": (30.1436, 78.3265),
+        "Fushimi Inari Shrine": (34.9671, 135.7727),
+        "Philosopher Path": (35.0268, 135.7955),
+        "Louvre Pyramid Entrance": (48.8610, 2.3358),
+        "Canal Saint-Martin": (48.8719, 2.3653),
+    }
+    for place, (lat, lng) in crowd_coords.items():
+        cur.execute("UPDATE crowd_info SET latitude = ?, longitude = ? WHERE place_name = ?", (lat, lng, place))
+
+    # Fallback: any place missing coordinates inherits its destination center with tiny jitter
+    for tbl in ("hotels", "restaurants", "activities", "transport", "rentals", "crowd_info"):
+        cur.execute(f"""
+            UPDATE {tbl}
+            SET latitude = (SELECT d.latitude FROM destinations d WHERE d.destination_id = {tbl}.destination_id),
+                longitude = (SELECT d.longitude FROM destinations d WHERE d.destination_id = {tbl}.destination_id)
+            WHERE latitude IS NULL OR longitude IS NULL
+        """)

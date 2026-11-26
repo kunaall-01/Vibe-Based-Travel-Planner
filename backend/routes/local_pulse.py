@@ -14,7 +14,9 @@ def get_local_pulse():
 
     rows = fetch_all("""
         SELECT c.crowd_id as id, c.place_name as place, c.crowd_level as level,
-               c.crowd_percentage as pct, c.quiet_times as best, c.suggestion
+               c.crowd_percentage as pct, c.quiet_times as best, c.suggestion,
+               COALESCE(c.latitude, d.latitude) as latitude,
+               COALESCE(c.longitude, d.longitude) as longitude
         FROM crowd_info c
         JOIN destinations d ON c.destination_id = d.destination_id
         WHERE LOWER(d.slug) = LOWER(?) OR LOWER(d.name) = LOWER(?)

@@ -6,6 +6,7 @@ import { destinations as fallbackDestinations } from '../data/mock.js';
 import { useApi } from '../api/client.js';
 import Photo from '../components/Photo.jsx';
 import Ticker from '../components/Ticker.jsx';
+import TravelMap from '../components/TravelMap.jsx';
 
 const containerVariants = {
   hidden: {},
@@ -203,6 +204,25 @@ export default function Home() {
             </div>
           </div>
         </motion.div>
+
+        <div style={{ marginTop: 8 }}>
+          <div className="about-pop-header" style={{ marginBottom: 16 }}>
+            <div>
+              <span className="eyebrow">Interactive World Atlas</span>
+              <h2 style={{ fontSize: 'clamp(28px, 3.6vw, 44px)', marginTop: 8 }}>Explore Places on the Map</h2>
+            </div>
+            <Link to="/search" className="figma-button">
+              Open Full Place Map <ArrowRight size={14} />
+            </Link>
+          </div>
+          <TravelMap
+            places={destinations.map((d) => ({ ...d, category: 'Destinations', meta: d.region }))}
+            onSelectPlace={(p) => nav(`/search?dest=${encodeURIComponent(p.name)}`)}
+            height={360}
+            title="Wayfarer Destination Atlas"
+            legendItems={[['Destinations', '#fde047']]}
+          />
+        </div>
       </section>
 
       <Ticker />
